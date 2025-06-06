@@ -1,0 +1,10 @@
+ID,Value
+Scanner name,Demo
+FOVx (cm),20.0
+FOVy (cm),20.0
+FOVz (cm),20.0
+Shimming factor,1e-5
+Bash path,gnome-terminal
+Arduino autotuning,242353133363518050E0
+Arduino interlock,242353133363518050E1
+Arduino attenuator,242353133363518050E2

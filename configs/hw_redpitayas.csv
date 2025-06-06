@@ -1,0 +1,8 @@
+ID,Value
+Red Pitaya model,rp-122
+Maximum input voltage (mV),225
+Gradient board model,gpa-fhdo
+Clock frequency (MHz),122.88
+ADC factor (mV/unit),13.788
+CIC delay points,3
+RP-1,192.168.1.101

@@ -1,0 +1,9 @@
+ID,Value
+Gx max (mT/m),50
+Gy max (mT/m),80
+Gz max (mT/m),70
+Max slew rate (mT/m/ms),80
+Gradient raster time (us),50
+Gradient rise time (us),400
+Gradient steps,16
+Gradient delay (us),9

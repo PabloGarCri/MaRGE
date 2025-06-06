@@ -1,0 +1,13 @@
+ID,Value
+RF de-blanking time (us),15
+RF dead time (us),300
+Gyromagnetic ratio (MHz/T),42.57747892
+Larmor frequency (MHz),3.066
+Reference time (us),70
+Oversampling factor,5
+Max readout points,1e5
+Add readout points,10
+LNA gain (dB),45
+RF gain min (dB),45
+RF gain max (dB),76
+RF01,0.15
