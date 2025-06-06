@@ -215,43 +215,37 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             delay=0,  # Delay before the RF pulse (if any)
             phase_offset=0.0,  # Set the phase offset for the pulse (0 by default)
         )
-        for kk in range (0,2*nRepetitions,2):
+        for kk in range (0,nRepetitions):
             flip_ex = rfExFA[int(kk/2)]  # Convert flip angle from degrees to radians
-            rf_ex_dict[kk + 1] = pp.make_block_pulse(
+            rf_ex_dict[2*kk + 1] = pp.make_block_pulse(
                 flip_angle=flip_ex,  # Set the flip angle for the RF pulse
                 system=system,  # Use the system properties defined earlier
                 duration=self.rfExTime,  # Set the RF pulse duration
                 delay=0,  # Delay before the RF pulse (if any)
                 phase_offset=0.0,  # Set the phase offset for the pulse (0 by default)
             )
-            rf_ex_dict[kk + 2] = pp.make_block_pulse(
+            rf_ex_dict[2*kk + 2] = pp.make_block_pulse(
                 flip_angle=np.pi,  # Set the flip angle for the RF pulse
                 system=system,  # Use the system properties defined earlier
                 duration=self.rfExTime,  # Set the RF pulse duration
-                delay=0,  # Delay before the RF pulse (if any)
+                delay=TRs[kk]/4,  # Delay before the RF pulse (if any)
                 phase_offset=0.0,  # Set the phase offset for the pulse (0 by default)
             )
 
+        TRprop = np.round(TRs / np.min(TRs))
         ## ADC block
         # Define the ADC block using PyPulseq. You need to specify number of samples and delay.
         adc_dict={}
-        for kk in range (0,2*nRepetitions,2):
-            rfExTimeRep = rfExFA[int(kk/2)] * self.rfExTime / 90 /2
+        for kk in range (0,nRepetitions):
+            rfExTimeRep = rfExFA[kk] * self.rfExTime / 90 /2
             blk = hw.blkTime
             ddt = hw.deadTime
             adc_dict[kk] = pp.make_adc(
-                num_samples= nPoints,
+                num_samples= nPoints * TRprop,
                 dwell=sampling_period *1e-6,
                 delay=hw.blkTime*1e-6 + rfExTimeRep + hw.deadTime*1e-6
             )
-            rfExTimeRep = rfExFA[int(kk/2)] * self.rfExTime / 90 /2
-            blk = hw.blkTime
-            ddt = hw.deadTime
-            adc_dict[kk+1] = pp.make_adc(
-                num_samples= nPoints,
-                dwell=sampling_period *1e-6,
-                delay=hw.blkTime*1e-6 + rfExTimeRep + hw.deadTime*1e-6
-            )
+
 
 
 
@@ -273,7 +267,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         for kk in range( 0, 2*nRepetitions):
             grad_dict[kk+1] = pp.make_extended_trapezoid(spokeAxis,amplitudes = [gradamp,gradamp], times=[0,round(TRs[int(kk/2)] / 2 / hw.grad_raster_time ) * hw.grad_raster_time],max_slew = hw.max_slew_rate,system=system)
 
-        grad_dict[2*nRepetitions + 1] = pp.make_extended_trapezoid(spokeAxis,amplitudes = [gradamp, 0], times=[0,20 * hw.grad_raster_time],max_slew = hw.max_slew_rate,system=system)
+        grad_dict[nRepetitions + 1] = pp.make_extended_trapezoid(spokeAxis,amplitudes = [gradamp, 0], times=[0,20 * hw.grad_raster_time],max_slew = hw.max_slew_rate,system=system)
 
         ## Repetition delay
         # Define the delay for repetition.
@@ -357,8 +351,11 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 batches[batch_num].add_block(rf_ex_dict[0]) #Inversion
                 batches[batch_num].add_block(pp.make_delay(inversion_time))
                 batches[batch_num].add_block(grad_dict[0])  # Grad rise
-                for kk in range (2*nRepetitions):
-                    batches[batch_num].add_block(rf_ex_dict[kk+1], adc_dict[kk], grad_dict[kk+1])
+
+                for kk in range (nRepetitions):
+                    batches[batch_num].add_block(rf_ex_dict[2*kk+1], grad_dict[kk+1])
+                    batches[batch_num].add_block(rf_ex_dict[2 * kk + 2], grad_dict[kk + 2],adc_dict[kk])
+
                     n_rd_points += self.nPoints  # Accounts for additional acquired points in each adc block
                     n_adc += 1
                 batches[batch_num].add_block(grad_dict[2*nRepetitions+1]) #Grad down
