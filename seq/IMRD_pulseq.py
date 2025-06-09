@@ -232,7 +232,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 phase_offset=0.0,  # Set the phase offset for the pulse (0 by default)
             )
 
-        TRprop = np.round(TRs / np.min(TRs))
         ## ADC block
         # Define the ADC block using PyPulseq. You need to specify number of samples and delay.
         adc_dict={}
@@ -241,9 +240,9 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             blk = hw.blkTime
             ddt = hw.deadTime
             adc_dict[kk] = pp.make_adc(
-                num_samples= nPoints * TRprop,
+                num_samples= nPoints,
                 dwell=sampling_period *1e-6,
-                delay=hw.blkTime*1e-6 + rfExTimeRep + hw.deadTime*1e-6
+                delay= TRs[kk]/4
             )
 
 
@@ -264,10 +263,10 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             gradamp = 0
 
         grad_dict[0] = pp.make_extended_trapezoid(spokeAxis,amplitudes = [0, gradamp], times=[0, 20* hw.grad_raster_time], max_slew = hw.max_slew_rate, system=system)
-        for kk in range( 0, 2*nRepetitions):
-            grad_dict[kk+1] = pp.make_extended_trapezoid(spokeAxis,amplitudes = [gradamp,gradamp], times=[0,round(TRs[int(kk/2)] / 2 / hw.grad_raster_time ) * hw.grad_raster_time],max_slew = hw.max_slew_rate,system=system)
-
-        grad_dict[nRepetitions + 1] = pp.make_extended_trapezoid(spokeAxis,amplitudes = [gradamp, 0], times=[0,20 * hw.grad_raster_time],max_slew = hw.max_slew_rate,system=system)
+        for kk in range( 0, 2*nRepetitions,2):
+            grad_dict[kk+1] = pp.make_extended_trapezoid(spokeAxis,amplitudes = [gradamp,gradamp], times=[0,round(TRs[int(kk/2)] / 4 / hw.grad_raster_time ) * hw.grad_raster_time],max_slew = hw.max_slew_rate,system=system)
+            grad_dict[kk +2] = pp.make_extended_trapezoid(spokeAxis, amplitudes=[gradamp, gradamp], times=[0, 3* round(TRs[int(kk / 2)] / 4 / hw.grad_raster_time) * hw.grad_raster_time], max_slew=hw.max_slew_rate,system=system)
+        grad_dict[2*nRepetitions + 1] = pp.make_extended_trapezoid(spokeAxis,amplitudes = [gradamp, 0], times=[0,20 * hw.grad_raster_time],max_slew = hw.max_slew_rate,system=system)
 
         ## Repetition delay
         # Define the delay for repetition.
@@ -354,7 +353,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
                 for kk in range (nRepetitions):
                     batches[batch_num].add_block(rf_ex_dict[2*kk+1], grad_dict[kk+1])
-                    batches[batch_num].add_block(rf_ex_dict[2 * kk + 2], grad_dict[kk + 2],adc_dict[kk])
+                    batches[batch_num].add_block(rf_ex_dict[2 * kk + 2], adc_dict[kk],grad_dict[kk + 2])
 
                     n_rd_points += self.nPoints  # Accounts for additional acquired points in each adc block
                     n_adc += 1
