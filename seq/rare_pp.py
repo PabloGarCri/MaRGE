@@ -1258,5 +1258,5 @@ class RarePyPulseq(blankSeq.MRIBLANKSEQ):
 if __name__ == '__main__':
     seq = RarePyPulseq()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=False, demo=True, standalone=True)
+    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
     seq.sequenceAnalysis(mode='Standalone')
