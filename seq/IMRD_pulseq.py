@@ -71,7 +71,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='/Users/pablogc/Downloads/CURRO/Codigos/IMRD/seq_prueba.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='/home/pablogc/Descargas/Codigos/MRID/30cycles.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -174,9 +174,11 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         TRs = np.round(params[1:1 + nRepetitions],2) * 1e-3  # s
         nPoints= self.mapVals['nPoints']
 
-        bandwith = 10*nPoints/ np.min(TRs) * 1e-6
-        sampling_period = 1 / bandwith  # us
 
+        bandwith_short = nPoints/ (((3e4 / 4)- hw.deadTime ) * 1e-6)
+        bandwith_long= nPoints/ (((3 * 5e5 / 4)- hw.deadTime ) * 1e-6)
+        sampling_period_short = 1 / bandwith_short  # us
+        sampling_period_long = 1 / bandwith_long #us
 
 
         #self.shimming= self.shimming + np.array(spokeAxis) * (hw.gammaB*1e-8/hw.gFactor)
@@ -187,10 +189,11 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         experiment must be defined and the sampling period should be obtained using get_
         '''
 
-        if not self.demo:
+        if not demo:
+            #Short TR acquisition
             expt = ex.Experiment(
                 lo_freq=hw.larmorFreq,  # Larmor frequency in MHz
-                rx_t=sampling_period,  # Sampling time in us
+                rx_t=sampling_period_short,  # Sampling time in us
                 init_gpa=False,  # Whether to initialize GPA board (False for True)
                 gpa_fhdo_offset_time=(1 / 0.2 / 3.1),  # GPA offset time calculation
                 auto_leds=True  # Automatic control of LEDs (False or True)
@@ -199,6 +202,27 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             bw = 1 / sampling_period  # MHz
             print("Acquisition bandwidth fixed to: %0.3f kHz" % (bw * 1e3))
             expt.__del__()
+        else:
+            bandwith_short *= 1e-6  # MHz
+            self.mapVals['bw_short_kHz'] = bandwith_short * 1e3
+
+        #Long TR acquisition
+        if not demo:
+            #Short TR acquisition
+            expt = ex.Experiment(
+                lo_freq=hw.larmorFreq,  # Larmor frequency in MHz
+                rx_t=sampling_period_long,  # Sampling time in us
+                init_gpa=False,  # Whether to initialize GPA board (False for True)
+                gpa_fhdo_offset_time=(1 / 0.2 / 3.1),  # GPA offset time calculation
+                auto_leds=True  # Automatic control of LEDs (False or True)
+            )
+            sampling_period = expt.get_sampling_period()  # us
+            bw = 1 / sampling_period  # MHz
+            print("Acquisition bandwidth fixed to: %0.3f kHz" % (bw * 1e3))
+            expt.__del__()
+        else:
+            bandwith_long *= 1e-6  # MHz
+            self.mapVals['bw_short_kHz'] = bandwith_long * 1e3
         #self.mapVals['bw_MHz'] = bw
         #self.mapVals['sampling_period_us'] = sampling_period
 
@@ -239,15 +263,25 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         ## ADC block
         # Define the ADC block using PyPulseq. You need to specify number of samples and delay.
-        adc_dict={}
+        adc_dict_short={}
+        adc_dict_long={}
         for kk in range (0,nRepetitions):
+            ratioTR= int(TRs[kk] / 0.01)
+            acqpoints = nPoints * ratioTR
             blk = hw.blkTime
             ddt = hw.deadTime
-            adc_dict[kk] = pp.make_adc(
-                num_samples= nPoints,
-                dwell=sampling_period *1e-6,
-                delay= TRs[kk]/4 - self.rfExTime - (nPoints/2 * sampling_period*1e-6)
+            adc_dict_short[kk] = pp.make_adc(
+                num_samples= acqpoints,
+                dwell=sampling_period_short *1e-6,
+                delay= TRs[kk]/4 - self.rfExTime - (acqpoints/2 * sampling_period_short*1e-6)
             )
+            if TRs[kk]>= 0.5:
+                acqpoints= nPoints * int(TRs[kk]/0.5)
+                adc_dict_long[kk] = pp.make_adc(
+                    num_samples=acqpoints,
+                    dwell=sampling_period_long * 1e-6,
+                    delay=TRs[kk] / 4 - self.rfExTime - (acqpoints / 2 * sampling_period_long * 1e-6)
+                )
 
 
 
@@ -340,7 +374,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         In this step you will populate the batches adding the blocks previously defined in step 4, and accounting for
         number of acquired points to check if a new batch is required.
         '''
-        def createBatches():
+        def createBatches(case='short'):
             """
             Create batches for the full pulse sequence.
 
@@ -387,15 +421,29 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 batches[batch_num].add_block(pp.make_delay(
                     inversion_time - batches[batch_num].block_durations[list(batches[batch_num].block_durations)[-1]]-hw.grad_rise_time))
                 batches[batch_num].add_block(grad_dict[0])  # Grad rise
+                if case == 'short':
+                    for kk in range(nRepetitions):
+                        batches[batch_num].add_block(rf_ex_dict[kk], grad_dict[2*kk + 1])
+                        if TRs[kk] < 0.5:
+                            batches[batch_num].add_block(rf_ex_pi_dict[kk], adc_dict_short[kk], grad_dict[2*kk + 2])
+                        else:
+                            batches[batch_num].add_block(rf_ex_pi_dict[kk], grad_dict[2 * kk + 2])
+                        n_rd_points += self.nPoints  # Accounts for additional acquired points in each adc block
+                        n_adc += 1
+                    batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
+                elif case=='long':
+                    for kk in range(nRepetitions):
+                        l_index=0
+                        batches[batch_num].add_block(rf_ex_dict[kk], grad_dict[2 * kk + 1])
+                        if TRs[kk] >= 0.5:
+                            batches[batch_num].add_block(rf_ex_pi_dict[kk], adc_dict_long[l_index], grad_dict[2 * kk + 2])
+                            l_index+=1
+                        else:
+                            batches[batch_num].add_block(rf_ex_pi_dict[kk], grad_dict[2 * kk + 2])
+                        n_rd_points += self.nPoints  # Accounts for additional acquired points in each adc block
+                        n_adc += 1
+                    batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
 
-                for kk in range(nRepetitions):
-                    print(kk)
-                    batches[batch_num].add_block(rf_ex_dict[kk], grad_dict[2*kk + 1])
-                    batches[batch_num].add_block(rf_ex_pi_dict[kk], adc_dict[kk], grad_dict[2*kk + 2])
-
-                    n_rd_points += self.nPoints  # Accounts for additional acquired points in each adc block
-                    n_adc += 1
-                batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
             # After final repetition, save and interpret the last batch
             batches[batch_num].write(batch_num + ".seq")
             waveforms[batch_num], param_dict = flo_interpreter.interpret(batch_num + ".seq")
@@ -417,13 +465,32 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         The decimated data is shifted to account for CIC delay, so data is synchronized with real-time signal
         '''
 
-        waveforms, n_readouts, n_adc = createBatches()
-        return self.runBatches(waveforms=waveforms,
-                               n_readouts=n_readouts,
-                               n_adc=n_adc,
+        waveforms_short, n_readouts_short, n_adc_short = createBatches(case='short')
+        waveforms_long, n_readouts_long, n_adc_long = createBatches(case='long')
+
+        # Run sequence a
+        if self.runBatches(waveforms=waveforms_short,
+                               n_readouts=n_readouts_short,
+                               n_adc=n_adc_short,
                                frequency=hw.larmorFreq,  # MHz
-                               bandwidth=bandwith,  # MHz
+                               bandwidth=bandwith_short,  # MHz
                                decimate='Normal',
+                               hardware=True,
+                               output='Short'
+                               ):
+            pass
+        else:
+            return False
+
+        # Run sequence b
+        return self.runBatches(waveforms=waveforms_long,
+                               n_readouts=n_readouts_long,
+                               n_adc=n_adc_long,
+                               frequency=hw.larmorFreq,  # MHz
+                               bandwidth=bandwith_long,  # MHz
+                               decimate='Normal',
+                               hardware=True,
+                               output='Long'
                                )
 
     def sequenceAnalysis(self, mode=None):

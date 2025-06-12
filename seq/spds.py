@@ -387,6 +387,7 @@ class spds(blankSeq.MRIBLANKSEQ):
 
             # Populate the sequence
             for ii in range(1, np.size(gradients_a, 0)):
+                ii=0
                 if case == 'a':
                     g_rd_amp = np.array([gradients_a[ii - 1, 0], gradients_a[ii, 0], gradients_a[ii, 0]]) * hw.gammaB
                     g_ph_amp = np.array([gradients_a[ii - 1, 1], gradients_a[ii, 1], gradients_a[ii, 1]]) * hw.gammaB
