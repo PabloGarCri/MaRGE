@@ -71,7 +71,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='/home/pablogc/Descargas/Codigos/MRID/30cycles.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='/home/pablogc/Descargas/Codigos/MRID/Imageless/Secuencias/IMRD parameters/test.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -272,15 +272,15 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             ddt = hw.deadTime
             adc_dict_short[kk] = pp.make_adc(
                 num_samples= acqpoints,
-                dwell=sampling_period_short *1e-6,
-                delay= TRs[kk]/4 - self.rfExTime - (acqpoints/2 * sampling_period_short*1e-6)
+                dwell=sampling_period_short,
+                delay= TRs[kk]/4 - self.rfExTime - (acqpoints/2 * sampling_period_short)
             )
             if TRs[kk]>= 0.5:
                 acqpoints= nPoints * int(TRs[kk]/0.5)
                 adc_dict_long[kk] = pp.make_adc(
                     num_samples=acqpoints,
-                    dwell=sampling_period_long * 1e-6,
-                    delay=TRs[kk] / 4 - self.rfExTime - (acqpoints / 2 * sampling_period_long * 1e-6)
+                    dwell=sampling_period_long,
+                    delay=TRs[kk] / 4 - self.rfExTime - (acqpoints / 2 * sampling_period_long )
                 )
 
 
@@ -432,8 +432,8 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                         n_adc += 1
                     batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
                 elif case=='long':
+                    l_index = 0
                     for kk in range(nRepetitions):
-                        l_index=0
                         batches[batch_num].add_block(rf_ex_dict[kk], grad_dict[2 * kk + 1])
                         if TRs[kk] >= 0.5:
                             batches[batch_num].add_block(rf_ex_pi_dict[kk], adc_dict_long[l_index], grad_dict[2 * kk + 2])
@@ -481,6 +481,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             pass
         else:
             return False
+
 
         # Run sequence b
         return self.runBatches(waveforms=waveforms_long,
