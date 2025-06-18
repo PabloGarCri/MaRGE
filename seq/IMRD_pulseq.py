@@ -71,7 +71,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='/home/pablogc/Descargas/Codigos/MRID/Imageless/Secuencias/IMRD parameters/test.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='/Users/pablogc/Downloads/CURRO/Codigos/IMRD/seq_prueba.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -180,9 +180,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         sampling_period_short = 1 / bandwith_short  # us
         sampling_period_long = 1 / bandwith_long #us
 
-
-        #self.shimming= self.shimming + np.array(spokeAxis) * (hw.gammaB*1e-8/hw.gFactor)
-
         '''
         Step 4: Define the experiment to get the true bandwidth
         In this step, student needs to get the real bandwidth used in the experiment. To get this bandwidth, an
@@ -265,6 +262,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         # Define the ADC block using PyPulseq. You need to specify number of samples and delay.
         adc_dict_short={}
         adc_dict_long={}
+        long_index=0
         for kk in range (0,nRepetitions):
             ratioTR= int(TRs[kk] / 0.01)
             acqpoints = nPoints * ratioTR
@@ -277,11 +275,12 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             )
             if TRs[kk]>= 0.5:
                 acqpoints= nPoints * int(TRs[kk]/0.5)
-                adc_dict_long[kk] = pp.make_adc(
+                adc_dict_long[long_index] = pp.make_adc(
                     num_samples=acqpoints,
                     dwell=sampling_period_long,
                     delay=TRs[kk] / 4 - self.rfExTime - (acqpoints / 2 * sampling_period_long )
                 )
+                long_index+=1
 
 
 
@@ -411,7 +410,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                     seq_idx += 1
                     n_rd_points_dict[batch_num] = n_rd_points  # Save readout points count
                     n_rd_points = 0
-                    batch_num = f"batch_{seq_idx}"
+                    batch_num = f"batch_{seq_idx}_{case}"
                     batches[batch_num], n_rd_points, n_adc_0 = initializeBatch()  # Initialize new batch
                     n_adc += n_adc_0
                     print(f"Creating {batch_num}.seq...")
