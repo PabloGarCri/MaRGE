@@ -71,7 +71,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='/Users/pablogc/Downloads/CURRO/Codigos/IMRD/seq_prueba.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='/home/pablogc/Descargas/Codigos/MRID/Imageless/Secuencias/IMRD parameters/test.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -416,6 +416,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                     print(f"Creating {batch_num}.seq...")
 
                 # Add sequence blocks (RF, ADC, repetition delay) to the current batch
+                long_position={}
                 batches[batch_num].add_block(rf_ex_inversion)  # Inversion
                 batches[batch_num].add_block(pp.make_delay(
                     inversion_time - batches[batch_num].block_durations[list(batches[batch_num].block_durations)[-1]]-hw.grad_rise_time))
@@ -435,6 +436,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                     for kk in range(nRepetitions):
                         batches[batch_num].add_block(rf_ex_dict[kk], grad_dict[2 * kk + 1])
                         if TRs[kk] >= 0.5:
+                            long_position= np.append(long_position,kk)
                             batches[batch_num].add_block(rf_ex_pi_dict[kk], adc_dict_long[l_index], grad_dict[2 * kk + 2])
                             l_index+=1
                         else:
@@ -452,7 +454,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             # Update the number of acquired ponits in the last batch
             n_rd_points_dict.pop('batch_0')
             n_rd_points_dict[batch_num] = n_rd_points
-
+            self.mapVals['long_position'] = long_position
 
             return waveforms, n_rd_points_dict, n_adc
 
@@ -475,7 +477,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                                bandwidth=bandwith_short,  # MHz
                                decimate='Normal',
                                hardware=True,
-                               output='Short'
+                               output='short'
                                ):
             pass
         else:
@@ -490,11 +492,13 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                                bandwidth=bandwith_long,  # MHz
                                decimate='Normal',
                                hardware=True,
-                               output='Long'
+                               output='long'
                                )
 
     def sequenceAnalysis(self, mode=None):
-
+        data_short = self.mapVals['data_decimated_short']
+        data_long = self.mapVals['data_decimated_long']
+        long_position = self.mapVals['long_position']
 
         # create self.out to run in iterative mode
         self.output = []
