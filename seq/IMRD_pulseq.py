@@ -26,6 +26,8 @@ import configs.units as units
 import seq.mriBlankSeq as blankSeq  # Import the mriBlankSequence for any new sequence.
 from marga_pulseq.interpreter import PSInterpreter  # Import the flocra-pulseq interpreter
 import pypulseq as pp  # Import PyPulseq
+import scipy.signal as scp
+
 
 # Template Class for MRI Sequences
 class IMRD(blankSeq.MRIBLANKSEQ):
@@ -262,19 +264,24 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         # Define the ADC block using PyPulseq. You need to specify number of samples and delay.
         adc_dict_short={}
         adc_dict_long={}
+        ratioPoints=np.zeros(0)
         long_index=0
         for kk in range (0,nRepetitions):
-            ratioTR= int(TRs[kk] / 0.01)
-            acqpoints = nPoints * ratioTR
-            blk = hw.blkTime
-            ddt = hw.deadTime
-            adc_dict_short[kk] = pp.make_adc(
-                num_samples= acqpoints,
-                dwell=sampling_period_short,
-                delay= TRs[kk]/4 - self.rfExTime - (acqpoints/2 * sampling_period_short)
-            )
-            if TRs[kk]>= 0.5:
-                acqpoints= nPoints * int(TRs[kk]/0.5)
+            if TRs[kk] < 0.5:
+                ratioTR= int(TRs[kk] / 0.01)
+                ratioPoints =np.append(ratioPoints, ratioTR)
+                acqpoints = nPoints * ratioTR + 2*hw.addRdPoints
+                blk = hw.blkTime
+                ddt = hw.deadTime
+                adc_dict_short[kk] = pp.make_adc(
+                    num_samples= acqpoints,
+                    dwell=sampling_period_short,
+                    delay= TRs[kk]/4 - self.rfExTime - (acqpoints/2 * sampling_period_short)
+                )
+            elif TRs[kk]>= 0.5:
+                ratioTR_long = int(TRs[kk]/0.5)
+                acqpoints= nPoints  * ratioTR_long + 2*hw.addRdPoints
+                ratioPoints =np.append(ratioPoints, ratioTR_long)
                 adc_dict_long[long_index] = pp.make_adc(
                     num_samples=acqpoints,
                     dwell=sampling_period_long,
@@ -282,6 +289,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 )
                 long_index+=1
 
+        self.mapVals['points_ratio'] = ratioPoints
 
 
 
@@ -416,7 +424,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                     print(f"Creating {batch_num}.seq...")
 
                 # Add sequence blocks (RF, ADC, repetition delay) to the current batch
-                long_position={}
+                long_position=np.zeros(0)
                 batches[batch_num].add_block(rf_ex_inversion)  # Inversion
                 batches[batch_num].add_block(pp.make_delay(
                     inversion_time - batches[batch_num].block_durations[list(batches[batch_num].block_durations)[-1]]-hw.grad_rise_time))
@@ -426,10 +434,12 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                         batches[batch_num].add_block(rf_ex_dict[kk], grad_dict[2*kk + 1])
                         if TRs[kk] < 0.5:
                             batches[batch_num].add_block(rf_ex_pi_dict[kk], adc_dict_short[kk], grad_dict[2*kk + 2])
+                            n_rd_points += int(self.nPoints * ratioPoints[kk]) + 2 * hw.addRdPoints # Accounts for additional acquired points in each adc block
+                            n_adc += 1
                         else:
                             batches[batch_num].add_block(rf_ex_pi_dict[kk], grad_dict[2 * kk + 2])
-                        n_rd_points += self.nPoints  # Accounts for additional acquired points in each adc block
-                        n_adc += 1
+
+
                     batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
                 elif case=='long':
                     l_index = 0
@@ -439,12 +449,12 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                             long_position= np.append(long_position,kk)
                             batches[batch_num].add_block(rf_ex_pi_dict[kk], adc_dict_long[l_index], grad_dict[2 * kk + 2])
                             l_index+=1
+                            n_rd_points += int(self.nPoints * ratioPoints[kk]) + 2 * hw.addRdPoints # Accounts for additional acquired points in each adc block
+                            n_adc += 1
                         else:
                             batches[batch_num].add_block(rf_ex_pi_dict[kk], grad_dict[2 * kk + 2])
-                        n_rd_points += self.nPoints  # Accounts for additional acquired points in each adc block
-                        n_adc += 1
-                    batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
 
+                    batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
             # After final repetition, save and interpret the last batch
             batches[batch_num].write(batch_num + ".seq")
             waveforms[batch_num], param_dict = flo_interpreter.interpret(batch_num + ".seq")
@@ -496,12 +506,39 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                                )
 
     def sequenceAnalysis(self, mode=None):
+
         data_short = self.mapVals['data_decimated_short']
         data_long = self.mapVals['data_decimated_long']
-        long_position = self.mapVals['long_position']
+        long_position = np.array(self.mapVals['long_position'])
+        points_ratio = self.mapVals['points_ratio']
+        nPoints = self.mapVals['nPoints']
+
+        data_concatenated = np.zeros(0)
+        for kk in range (len(points_ratio)):
+            if len(long_position) > 0 :
+                if kk != int(long_position[0]):
+                    data_concatenated=np.concatenate((data_concatenated,scp.decimate(x=data_short[hw.addRdPoints:hw.addRdPoints + int(nPoints*points_ratio[kk])],q= int(points_ratio[kk]))),axis=0)
+                    data_short=data_short[int(nPoints*points_ratio[kk])+ 2 * hw.addRdPoints:]
+                else:
+                    data_concatenated = np.concatenate((data_concatenated, scp.decimate(x=data_long[hw.addRdPoints:hw.addRdPoints + int(nPoints * points_ratio[kk])],q=int(points_ratio[kk]))),axis=0)
+                    data_long=data_long[int(nPoints * points_ratio[kk])+ 2 * hw.addRdPoints :]
+                    long_position=long_position[1:]
+            else:
+                data_concatenated = np.concatenate((data_concatenated,scp.decimate(x=data_short[hw.addRdPoints:hw.addRdPoints + int(nPoints * points_ratio[kk])],q=int(points_ratio[kk]))), axis=0)
+                data_short = data_short[int(nPoints * points_ratio[kk])+ 2 * hw.addRdPoints :]
+
+        result1 = {'widget': 'curve',
+                   'xData': np.linspace(0,len(points_ratio),len(points_ratio)*nPoints),
+                   'yData': [np.real(data_concatenated), np.imag(data_concatenated)],
+                   'xLabel': 'Time points (1/TR)',
+                   'yLabel': 'Signal amplitude (mV)',
+                   'title': 'Evolution during signal',
+                   'legend': ['real', 'imag'],
+                   'row': 0,
+                   'col': 0}
 
         # create self.out to run in iterative mode
-        self.output = []
+        self.output = [result1]
 
         # save data once self.output is created
         self.saveRawData()
@@ -515,6 +552,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 if __name__=="__main__":
     seq = IMRD()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
-    # seq.sequenceAnalysis(mode='Standalone')
+    seq.sequenceRun(plot_seq=False, demo=True, standalone=True)
+    seq.sequenceAnalysis(mode='Standalone')
     
