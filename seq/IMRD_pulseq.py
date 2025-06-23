@@ -297,8 +297,11 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         ## GRADIENT FOR 1 SPOKE
         grad_dict={}
 
-        gradamp = 10  # mT/m, ajustar si hace falta
 
+        if self.mapVals['spoke']==1:
+            gradamp = 10  # mT/m, ajustar si hace falta
+        else:
+            gradamp = 0
         # Gradiente de subida inicial (rampa)
         grad_dict[0] = pp.make_extended_trapezoid(
             spokeAxis,
@@ -455,6 +458,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                             batches[batch_num].add_block(rf_ex_pi_dict[kk], grad_dict[2 * kk + 2])
 
                     batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
+                    batches[batch_num].add_block(pp.make_delay(10))
             # After final repetition, save and interpret the last batch
             batches[batch_num].write(batch_num + ".seq")
             waveforms[batch_num], param_dict = flo_interpreter.interpret(batch_num + ".seq")
@@ -552,6 +556,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 if __name__=="__main__":
     seq = IMRD()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=False, demo=True, standalone=True)
+    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
     seq.sequenceAnalysis(mode='Standalone')
     
