@@ -9,6 +9,7 @@ from configs.hw_config import grad_raster_time, grad_rise_time
 # Get the directory of the current script
 main_directory = os.path.dirname(os.path.realpath(__file__))
 parent_directory = os.path.dirname(main_directory)
+parent_directory_imrdparams = os.path.join(parent_directory,'IMRD_Parameters')
 parent_directory = os.path.dirname(parent_directory)
 
 # Define the subdirectories you want to add to sys.path
@@ -73,7 +74,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='/home/pablogc/Descargas/Codigos/MRID/Imageless/Secuencias/IMRD parameters/test.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='30_cycles_testround.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -169,7 +170,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         gradient strengths, before defining the sequence blocks.
         '''
         nScans = self.mapVals['nScans']
-        params = np.array(np.loadtxt(self.mapVals['file']))
+        params = np.array(np.loadtxt(str(os.path.join(parent_directory_imrdparams, self.mapVals['file']))))
         inversion_time = np.round(params[0],2) * 1e-3
         spokeAxis=self.mapVals['spokeAxis']
         nRepetitions = int((len(params) - 1 ) / 2)
