@@ -439,6 +439,8 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 # Add sequence blocks (RF, ADC, repetition delay) to the current batch
                 long_position=np.zeros(0)
                 if case == "short":
+                    batches[batch_num].add_block(pp.make_delay(hw.deadTime * 1e-6))
+                    batches[batch_num].add_block(pp.make_adc(num_samples= nPoints + 2*hw.addRdPoints,dwell=sampling_period_short,delay= 0))  #Medida de ruido
                     batches[batch_num].add_block(rf_rho_dict[0])
                     batches[batch_num].add_block(pp.make_delay(hw.deadTime*1e-6))
                     batches[batch_num].add_block(rf_rho_dict[1],adc_rho_dict[0])
@@ -536,7 +538,10 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         nPoints = self.mapVals['nPoints']
 
         data_concatenated = np.zeros(0)
-        Rhopoint=max(data_short[hw.addRdPoints : nPoints + hw.addRdPoints])
+
+        noisemeasure= data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
+        data_short = data_short[nPoints + 2 * hw.addRdPoints:]
+        rhopoints=max(data_short[hw.addRdPoints : nPoints + hw.addRdPoints])
         data_short=data_short[nPoints+2*hw.addRdPoints :]
         for kk in range (len(points_ratio)):
             if len(long_position) > 0 :
@@ -576,6 +581,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 if __name__=="__main__":
     seq = IMRD()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=False, demo=True, standalone=True)
+    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
     seq.sequenceAnalysis(mode='Standalone')
     
