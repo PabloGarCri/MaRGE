@@ -78,10 +78,13 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
-        self.addParameter(key='spoke', string='Spokes', val=1, field='SEQ',tip=' 1 = 1D, 0 = Gradientless')
+        self.addParameter(key='spoke', string='Spokes', val=0, field='SEQ',tip=' 1 = 1D, 0 = Gradientless')
 
         self.addParameter(key='spokeAxis', string='Axis for Spokes', val='x', field='SEQ')
 
+        self.rotation = np.zeros(4)
+        self.angle = None
+        self.rotationAxis = None
 
     def sequenceInfo(self):
         """
@@ -178,10 +181,10 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         nPoints= self.mapVals['nPoints']
 
 
-        bandwith_short = (nPoints + 2*hw.addRdPoints) / ((10e-3 * 3/4)  - hw.deadTime * 1e-6 - self.rfExTime  )
-        bandwith_long= (nPoints + 2*hw.addRdPoints) / ((0.1 * 3/4)  - hw.deadTime * 1e-6 - self.rfExTime  )
-        sampling_period_short = 1 / bandwith_short  # us
-        sampling_period_long = 1 / bandwith_long #us
+        bandwidth_short = (nPoints + 2*hw.addRdPoints) / ((10e-3 * 3/4)  - hw.deadTime * 1e-6 - self.rfExTime  )
+        bandwidth_long= (nPoints + 2*hw.addRdPoints) / ((0.1 * 3/4)  - hw.deadTime * 1e-6 - self.rfExTime  )
+        sampling_period_short = 1 / bandwidth_short   # us
+        sampling_period_long = 1 / bandwidth_long #us
 
         '''
         Step 4: Define the experiment to get the true bandwidth
@@ -193,36 +196,36 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             #Short TR acquisition
             expt = ex.Experiment(
                 lo_freq=hw.larmorFreq,  # Larmor frequency in MHz
-                rx_t=sampling_period_short,  # Sampling time in us
+                rx_t=sampling_period_short*1e6,  # Sampling time in us
                 init_gpa=False,  # Whether to initialize GPA board (False for True)
                 gpa_fhdo_offset_time=(1 / 0.2 / 3.1),  # GPA offset time calculation
                 auto_leds=True  # Automatic control of LEDs (False or True)
             )
             sampling_period = expt.get_sampling_period()  # us
-            bw = 1 / sampling_period  # MHz
-            print("Acquisition bandwidth fixed to: %0.3f kHz" % (bw * 1e3))
+            bandwidth_short = 1 / sampling_period  # MHz
+            print("Acquisition bandwidth fixed to: %0.3f kHz" % (bandwidth_short * 1e3))
             expt.__del__()
         else:
-            bandwith_short *= 1e-6  # MHz
-            self.mapVals['bw_short_kHz'] = bandwith_short * 1e3
+            bandwidth_short *= 1e-6  # MHz
+            self.mapVals['bw_short_kHz'] = bandwidth_short * 1e3
 
         #Long TR acquisition
         if not demo:
             #Short TR acquisition
             expt = ex.Experiment(
                 lo_freq=hw.larmorFreq,  # Larmor frequency in MHz
-                rx_t=sampling_period_long,  # Sampling time in us
+                rx_t=sampling_period_long*1e6,  # Sampling time in us
                 init_gpa=False,  # Whether to initialize GPA board (False for True)
                 gpa_fhdo_offset_time=(1 / 0.2 / 3.1),  # GPA offset time calculation
                 auto_leds=True  # Automatic control of LEDs (False or True)
             )
             sampling_period = expt.get_sampling_period()  # us
-            bw = 1 / sampling_period  # MHz
-            print("Acquisition bandwidth fixed to: %0.3f kHz" % (bw * 1e3))
+            bandwidth_long = 1 / sampling_period  # MHz
+            print("Acquisition bandwidth fixed to: %0.3f kHz" % (bandwidth_long * 1e3))
             expt.__del__()
         else:
-            bandwith_long *= 1e-6  # MHz
-            self.mapVals['bw_short_kHz'] = bandwith_long * 1e3
+            bandwidth_long *= 1e-6  # MHz
+            self.mapVals['bw_long_kHz'] = bandwidth_long * 1e3
         #self.mapVals['bw_MHz'] = bw
         #self.mapVals['sampling_period_us'] = sampling_period
 
@@ -281,7 +284,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 acqpoints = nPoints * ratioTR + 2*hw.addRdPoints
                 blk = hw.blkTime
                 ddt = hw.deadTime
-                delay_acq = TRs[kk] / 4 -  (acqpoints / 2 * sampling_period_short)
+                delay_acq = TRs[kk] / 4 -  ((acqpoints / 2) * sampling_period_short)
                 adc_dict_short[kk] = pp.make_adc(
                     num_samples= acqpoints,
                     dwell=sampling_period_short,
@@ -291,7 +294,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 ratioTR_long = int(TRs[kk]/0.1)
                 acqpoints= nPoints  * ratioTR_long + 2*hw.addRdPoints
                 ratioPoints =np.append(ratioPoints, ratioTR_long)
-                delay_acq = TRs[kk] / 4 -  (acqpoints / 2 * sampling_period_long)
+                delay_acq = TRs[kk] / 4 -  ((acqpoints / 2) * sampling_period_long)
                 adc_dict_long[long_index] = pp.make_adc(
                     num_samples=acqpoints,
                     dwell=sampling_period_long,
@@ -508,7 +511,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                                n_readouts=n_readouts_short,
                                n_adc=n_adc_short,
                                frequency=hw.larmorFreq,  # MHz
-                               bandwidth=bandwith_short,  # MHz
+                               bandwidth=bandwidth_short,  # MHz
                                decimate='Normal',
                                hardware=True,
                                output='short'
@@ -523,7 +526,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                                n_readouts=n_readouts_long,
                                n_adc=n_adc_long,
                                frequency=hw.larmorFreq,  # MHz
-                               bandwidth=bandwith_long,  # MHz
+                               bandwidth=bandwidth_long,  # MHz
                                decimate='Normal',
                                hardware=True,
                                output='long'
@@ -541,7 +544,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         noisemeasure= data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
         data_short = data_short[nPoints + 2 * hw.addRdPoints:]
-        rhopoints=max(data_short[hw.addRdPoints : nPoints + hw.addRdPoints])
+        rhopoints=data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
         data_short=data_short[nPoints+2*hw.addRdPoints :]
         for kk in range (len(points_ratio)):
             if len(long_position) > 0 :
@@ -581,6 +584,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 if __name__=="__main__":
     seq = IMRD()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
-    seq.sequenceAnalysis(mode='Standalone')
+    seq.sequenceRun(plot_seq=True, demo=False, standalone=True)
+    # seq.sequenceAnalysis(mode='Standalone')
     
