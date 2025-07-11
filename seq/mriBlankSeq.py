@@ -385,6 +385,8 @@ class MRIBLANKSEQ:
 
                         # Check if acquired points coincide with expected points
                         if acquired_points != expected_points:
+                            print(acquired_points)
+                            print(expected_points)
                             print("WARNING: data apoints lost!")
                             print("Repeating batch...")
 

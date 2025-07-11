@@ -173,6 +173,6 @@ class Noise(blankSeq.MRIBLANKSEQ):
 if __name__=='__main__':
     seq = Noise()
     seq.sequenceAtributes()
-    seq.sequenceRun(demo=True)
-    seq.sequenceAnalysis(mode='Standalone')
+    seq.sequenceRun(demo=False)
+    # seq.sequenceAnalysis(mode='Standalone')
 
