@@ -74,7 +74,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='30_cycles_CuSOclay.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='test.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -178,6 +178,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         spokeAxis=self.mapVals['spokeAxis']
         nRepetitions = int((len(params) - 1 ) / 2)
         TRs = np.round(params[1:1 + nRepetitions],2) * 1e-3  # s
+        self.mapVals['TRs'] = TRs
         nPoints= self.mapVals['nPoints']
 
         adc_duration = 2.2e-3
@@ -468,6 +469,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                                hardware=True,
                                output='short'
                                )
+        return True
 
 
     def sequenceAnalysis(self, mode=None):
@@ -482,11 +484,11 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         rhopoints=data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
         data_short=data_short[nPoints+2*hw.addRdPoints :]
         for kk in range (nTRs):
-            data_concatenated = np.concatenate(data_concatenated,data_short[hw.addRdPoints:hw.addRdPoints + int(nPoints )])
-            data_short = data_short[int(nPoints)+ 2 * hw.addRdPoints :]
+            data_concatenated = np.concatenate((data_concatenated,data_short[hw.addRdPoints:hw.addRdPoints + nPoints ]), axis=0 )
+            data_short = data_short[nPoints+ 2 * hw.addRdPoints :]
 
         result1 = {'widget': 'curve',
-                   'xData': np.linspace(0,len(nTRs),(len(nTRs))*nPoints),
+                   'xData': np.linspace(0,nTRs,nTRs*nPoints),
                    'yData': [np.real(data_concatenated), np.imag(data_concatenated)],
                    'xLabel': 'Time points (1/TR)',
                    'yLabel': 'Signal amplitude (mV)',
