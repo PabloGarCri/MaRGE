@@ -82,9 +82,9 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         self.addParameter(key='spokeAxis', string='Axis for Spokes', val='x', field='SEQ')
 
-        self.addParameter(key='piPulseType', string='Type of refocusing pulses', val='CPMG', field='RF')
+        self.addParameter(key='piPulseType', string='Type of refocusing pulses', val='CP', field='RF')
 
-        self.addParameter(key='echoSpacing', string='Echo Spacing', val=10.0, field='RF')
+        self.addParameter(key='nEchos', string='Number of echoes', val=3, field='RF')
 
         self.addParameter(key='acquistionTime', string = 'Acquistion Time', val = 4.0 , field = 'IM' )
 
@@ -96,10 +96,10 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         """
         Description of the sequence. Students should customize this.
         """
-        print("IMRD sequence with fixed window")
+        print("IMRD sequence with fixed windows and TSE acquisition")
         print("Pablo García-Cristóbal")
         print("i3M, UPV-CSIC, València, Spain\n")
-        print("><(((('>  <'((((><")
+        print(" ><(((º> ")
 
     def sequenceTime(self):
         """
@@ -242,10 +242,10 @@ class IMRD(blankSeq.MRIBLANKSEQ):
             phase_offset=0.0,  # Set the phase offset for the pulse (0 by default)
         )
 
-        echoSpacing= self.mapVals['echoSpacing'] * 1e-3
-        nEchos = TRs / echoSpacing
+        nEchos= self.mapVals['nEchos']
+        echoSpacing = TRs / nEchos
         jj=0
-        for kk in range (0,nRepetitions):
+        for kk in range (nRepetitions):
             flip_ex = rfExFA[kk]  # Convert flip angle from degrees to radians
             rf_ex_dict[kk] = pp.make_block_pulse(
                 flip_angle=flip_ex,  # Set the flip angle for the RF pulse
@@ -254,7 +254,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 delay=0,  # Delay before the RF pulse (if any)
                 phase_offset=0.0,  # Set the phase offset for the pulse (0 by default)
             )
-            for echoIndex in range(int(nEchos[kk])):
+            for echoIndex in range(nEchos):
                 if  self.mapVals['piPulseType'] == 'CP':
                     phase = 0.0
                 elif  self.mapVals['piPulseType'] == 'CPMG':
@@ -282,11 +282,13 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         adc_index=0
         for kk in range (0,nRepetitions):
-            for ll in range (int(nEchos[kk])):
+            for ll in range (nEchos):
                 acqpoints = nPoints + 2*hw.addRdPoints
                 blk = hw.blkTime
                 ddt = hw.deadTime
-                delay_acq = echoSpacing
+                tau = TRs[kk] / nEchos
+                tau = round(tau / hw.grad_raster_time) * hw.grad_raster_time
+                delay_acq = half_tau = round((tau / 2) / hw.grad_raster_time) * hw.grad_raster_time - adc_duration / 2
                 adc_dict_short[adc_index] = pp.make_adc(
                     num_samples= acqpoints,
                     dwell=sampling_period_short,
@@ -300,51 +302,58 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         ## GRADIENT FOR 1 SPOKE
         grad_dict={}
-
+        ll=0
 
         if self.mapVals['spoke']==1:
             gradamp = 10  # mT/m, ajustar si hace falta
         else:
             gradamp = 0
         # Gradiente de subida inicial (rampa)
-        grad_dict[0] = pp.make_extended_trapezoid(
+        grad_dict[ll] = pp.make_extended_trapezoid(
             spokeAxis,
             amplitudes=[0, gradamp],
             times=[0, hw.grad_rise_time],
             max_slew=hw.max_slew_rate,
             system=system
         )
-
+        ll+=1
         # Gradientes constantes durante cada repetición
-        for kk in range(0, 2 * nRepetitions, 2):
-            rep_index = int(kk / 2)
+        for kk in range(nRepetitions):
+            # Duración de cada segmento entre ecos
+            tau = TRs[kk] / nEchos
 
-            # Primer bloque: duración = TR/4 - rfExTime/2
-            dur1 = (TRs[rep_index] / 4) #- (self.rfExTime / 2)
-            dur1 = round(dur1 / hw.grad_raster_time) * hw.grad_raster_time  # redondear a múltiplo de grad_raster_time
-
-            grad_dict[kk + 1] = pp.make_extended_trapezoid(
+            # Redondear tau a múltiplo del grad_raster_time
+            tau = round(tau / hw.grad_raster_time) * hw.grad_raster_time
+            half_tau = round((tau / 2) / hw.grad_raster_time) * hw.grad_raster_time
+            grad_dict[ll] = pp.make_extended_trapezoid(
                 spokeAxis,
-                amplitudes=[gradamp, gradamp],
-                times=[0, dur1],
+                amplitudes=[gradamp,gradamp],
+                times=[0,half_tau],
                 max_slew=hw.max_slew_rate,
                 system=system
             )
-
-            # Segundo bloque: duración = 3*TR/4
-            dur2 = (3 * TRs[rep_index]) / 4
-            dur2 = round(dur2 / hw.grad_raster_time) * hw.grad_raster_time
-
-            grad_dict[kk + 2] = pp.make_extended_trapezoid(
+            ll+=1
+            for jj in range (nEchos-1):
+                grad_dict[ll] = pp.make_extended_trapezoid(
+                    spokeAxis,
+                    amplitudes=[gradamp, gradamp],
+                    times=[0, tau],
+                    max_slew=hw.max_slew_rate,
+                    system=system
+                )
+                ll += 1
+            grad_dict[ll] = pp.make_extended_trapezoid(
                 spokeAxis,
-                amplitudes=[gradamp, gradamp],
-                times=[0, dur2],
+                amplitudes=[gradamp,gradamp],
+                times=[0,half_tau],
                 max_slew=hw.max_slew_rate,
                 system=system
             )
+            ll+=1
+
 
         # Gradiente de bajada al final
-        grad_dict[2 * nRepetitions + 1] = pp.make_extended_trapezoid(
+        grad_dict[ll] = pp.make_extended_trapezoid(
             spokeAxis,
             amplitudes=[gradamp, 0],
             times=[0, hw.grad_rise_time],
@@ -447,14 +456,21 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 batches[batch_num].add_block(rf_ex_inversion)  # Inversion
                 batches[batch_num].add_block(pp.make_delay(
                     inversion_time - batches[batch_num].block_durations[list(batches[batch_num].block_durations)[-1]]-hw.grad_rise_time))
-                batches[batch_num].add_block(grad_dict[0])  # Grad rise
+                grad_index = 0
+                batches[batch_num].add_block(grad_dict[grad_index])  # Grad rise
+                grad_index+=1
                 if case == 'short':
+                    ll=0
                     for kk in range(nRepetitions):
-                        batches[batch_num].add_block(rf_ex_dict[kk], grad_dict[2*kk + 1])
-                        batches[batch_num].add_block(rf_ex_pi_dict[kk], adc_dict_short[kk], grad_dict[2*kk + 2])
-                        n_rd_points += int(self.nPoints) + 2 * hw.addRdPoints # Accounts for additional acquired points in each adc block
-                        n_adc += 1
-
+                        batches[batch_num].add_block(rf_ex_dict[kk], grad_dict[grad_index])
+                        grad_index += 1
+                        for echos in range(nEchos-1):
+                            batches[batch_num].add_block(rf_ex_pi_dict[nEchos*kk +echos ], adc_dict_short[nEchos*kk +echos],grad_dict[grad_index])
+                            grad_index += 1
+                            n_rd_points += int(self.nPoints) + 2 * hw.addRdPoints # Accounts for additional acquired points in each adc block
+                            n_adc += 1
+                        batches[batch_num].add_block(rf_ex_pi_dict[nEchos*kk + nEchos-1],grad_dict[grad_index])
+                        grad_index+=1
 
                     batches[batch_num].add_block(grad_dict[2 * nRepetitions + 1])  # Grad down
                     batches[batch_num].add_block(pp.make_delay(10))
@@ -499,18 +515,19 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         data_short = self.mapVals['data_decimated_short']
         nPoints = self.mapVals['nPoints']
         nTRs = len(self.mapVals['TRs'])
+        nEchos = self.mapVals['nEchos']
         data_concatenated = np.zeros(0)
 
         noisemeasure= data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
         data_short = data_short[nPoints + 2 * hw.addRdPoints:]
         rhopoints=data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
         data_short=data_short[nPoints+2*hw.addRdPoints :]
-        for kk in range (nTRs):
+        for kk in range (nTRs*(nEchos-1)):
             data_concatenated = np.concatenate((data_concatenated,data_short[hw.addRdPoints:hw.addRdPoints + nPoints ]), axis=0 )
             data_short = data_short[nPoints+ 2 * hw.addRdPoints :]
 
         result1 = {'widget': 'curve',
-                   'xData': np.linspace(0,nTRs,nTRs*nPoints),
+                   'xData': np.linspace(0,nTRs,nTRs*(nEchos-1)*nPoints),
                    'yData': [np.real(data_concatenated), np.imag(data_concatenated)],
                    'xLabel': 'Time points (1/TR)',
                    'yLabel': 'Signal amplitude (mV)',
@@ -534,6 +551,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 if __name__=="__main__":
     seq = IMRD()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
+    seq.sequenceRun(plot_seq=False, demo=True, standalone=True)
     # seq.sequenceAnalysis(mode='Standalone')
     
