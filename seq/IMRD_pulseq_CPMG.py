@@ -1,3 +1,5 @@
+from bdb import Breakpoint
+
 import pypulseq as pp
 
 import os
@@ -74,7 +76,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='test.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='30_cycles_testround.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -84,7 +86,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         self.addParameter(key='piPulseType', string='Type of refocusing pulses', val='CP', field='RF')
 
-        self.addParameter(key='nEchos', string='Number of echoes', val=3, field='RF')
+        self.addParameter(key='nEchos', string='Number of echoes', val=2, field='RF')
 
         self.addParameter(key='acquistionTime', string = 'Acquistion Time', val = 4.0 , field = 'IM' )
 
@@ -287,6 +289,10 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 blk = hw.blkTime
                 ddt = hw.deadTime
                 tau = TRs[kk] / nEchos
+                if tau <= (adc_duration+1e-3):
+                    raise ValueError('Too many echoes, tau is shorter than adc windows length')
+                    exit()
+
                 tau = round(tau / hw.grad_raster_time) * hw.grad_raster_time
                 delay_acq = half_tau = round((tau / 2) / hw.grad_raster_time) * hw.grad_raster_time - adc_duration / 2
                 adc_dict_short[adc_index] = pp.make_adc(
@@ -551,6 +557,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 if __name__=="__main__":
     seq = IMRD()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=False, demo=True, standalone=True)
+    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
     # seq.sequenceAnalysis(mode='Standalone')
     
