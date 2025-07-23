@@ -76,7 +76,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='30_cycles_testround.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='Test1.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -84,7 +84,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         self.addParameter(key='spokeAxis', string='Axis for Spokes', val='x', field='SEQ')
 
-        self.addParameter(key='piPulseType', string='Type of refocusing pulses', val='CP', field='RF')
+        self.addParameter(key='piPulseType', string='Type of refocusing pulses', val='CPMG', field='RF')
 
         self.addParameter(key='nEchos', string='Number of echoes', val=2, field='RF')
 
@@ -269,7 +269,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                 rf_ex_pi_dict[jj] = pp.make_block_pulse(
                         flip_angle=np.pi,  # Set the flip angle for the RF pulse
                         system=system,  # Use the system properties defined earlier
-                        duration=self.rfExTime,  # Set the RF pulse duration
+                        duration=2 * self.rfExTime,  # Set the RF pulse duration
                         delay=0,  # Delay before the RF pulse (if any)
                         phase_offset= phase,  # Set the phase offset for the pulse (0 by default)
                 )
@@ -524,9 +524,9 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         nEchos = self.mapVals['nEchos']
         data_concatenated = np.zeros(0)
 
-        noisemeasure= data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
+        self.mapVals['noise'] = data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
         data_short = data_short[nPoints + 2 * hw.addRdPoints:]
-        rhopoints=data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
+        self.mapVals['rhopoints'] = data_short[hw.addRdPoints : nPoints + hw.addRdPoints]
         data_short=data_short[nPoints+2*hw.addRdPoints :]
         for kk in range (nTRs*(nEchos-1)):
             data_concatenated = np.concatenate((data_concatenated,data_short[hw.addRdPoints:hw.addRdPoints + nPoints ]), axis=0 )
@@ -534,7 +534,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         result1 = {'widget': 'curve',
                    'xData': np.linspace(0,nTRs,nTRs*(nEchos-1)*nPoints),
-                   'yData': [np.real(data_concatenated), np.imag(data_concatenated)],
+                   'yData': [np.abs(data_concatenated)],
                    'xLabel': 'Time points (1/TR)',
                    'yLabel': 'Signal amplitude (mV)',
                    'title': 'Evolution during signal',
@@ -544,7 +544,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         # create self.out to run in iterative mode
         self.output = [result1]
-
+        self.mapVals['data_end'] = data_concatenated
         # save data once self.output is created
         self.saveRawData()
 
