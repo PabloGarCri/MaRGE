@@ -55,7 +55,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         self.addParameter(key='seqName', string='Sequence Name', val='IMRD_fixed windows',
                           tip="The identifier name for the sequence.")
 
-        self.addParameter(key='toMaRGE', val=True)
+        self.addParameter(key='toMaRGE', val=False)
 
         # Number of scans
         self.addParameter(key='nScans', string='Number of scans', val=1, field='IM',

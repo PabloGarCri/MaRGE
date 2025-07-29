@@ -762,6 +762,9 @@ class RarePyPulseq(blankSeq.MRIBLANKSEQ):
             batches[batch_num].write(batch_num + ".seq")
             waveforms[batch_num], param_dict = flo_interpreter.interpret(batch_num + ".seq")
             print(f"{batch_num}.seq ready!")
+
+
+
             print(f"{len(batches)} batches created. Sequence ready!")
 
             # Update the number of acquired points in the last batch
