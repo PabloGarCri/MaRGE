@@ -65,8 +65,8 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           tip="Number of repetitions of the full scan.")
         
         #Delay between scans
-        self.addParameter(key='delayScans', string='Delay between scans', val=10, field='IM',
-                          tip="Delay between repetitions of the full scan in miliseconds.", units=units.ms)
+        self.addParameter(key='delayScans', string='Delay between scans (s)', val=10, field='IM',
+                          tip="Delay between repetitions of the full scan in seconds.", units=units.ms)
         
         # Acquisition bandwidth
         self.addParameter(key='nPoints', string='Number of points', val=200, field='IM',
@@ -77,7 +77,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
                           field='RF',
                           tip="Duration of the RF excitation pulse in microseconds (us).")
 
-        self.addParameter(key='file', string='Paramter File', val='TestTSE.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
+        self.addParameter(key='file', string='Paramter File', val='10_cycles_smalltarro.txt', field='SEQ', tip="Path to the .txt file containing the FAs and TRs")
 
         self.addParameter(key='shimming', string='Shimming', val=[0.0, 0.0, 0.0], field='SEQ', units=units.sh)
 
@@ -90,6 +90,8 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         self.addParameter(key='gradAmp', string='Gradient Amplitude (mT/m)', val=100, field='IM')
 
         self.addParameter(key='nEchos', string='Number of echoes', val=2, field='IM')
+
+        self.addParameter(key='pulseAmp', string='Pulse Amplitude (a.u.)',val=0.4 , field = 'RF')
 
         self.rotation = np.zeros(4)
         self.angle = None
@@ -150,7 +152,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         flo_interpreter = PSInterpreter(
             tx_warmup=hw.blkTime,  # Transmit chain warm-up time (us)
             rf_center=hw.larmorFreq * 1e6,  # Larmor frequency (Hz)
-            rf_amp_max= hw.b1Efficiency / (2 * np.pi) * 1e6,  # Maximum RF amplitude (Hz)
+            rf_amp_max= np.pi/(self.mapVals['pulseAmp'] * self.mapVals['rfExTime']) / (2 * np.pi) * 1e6,  # Maximum RF amplitude (Hz)
             gx_max=hw.gFactor[0] * hw.gammaB,  # Maximum gradient amplitude for X (Hz/m)
             gy_max=hw.gFactor[1] * hw.gammaB,  # Maximum gradient amplitude for Y (Hz/m)
             gz_max=hw.gFactor[2] * hw.gammaB,  # Maximum gradient amplitude for Z (Hz/m)
@@ -188,6 +190,7 @@ class IMRD(blankSeq.MRIBLANKSEQ):
         nRepetitions = int((len(params) - 1 ) / 2)
         TRs = np.round(params[1:1 + nRepetitions],2) * 1e-3  # s
         self.mapVals['TRs'] = TRs
+        self.mapVals['tIR'] = inversion_time
         nPoints= self.mapVals['nPoints']
 
         adc_duration = self.mapVals['acquistionTime'] * 1e-3
@@ -567,6 +570,6 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 if __name__=="__main__":
     seq = IMRD()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=False, demo=True, standalone=True)
+    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
     seq.sequenceAnalysis(mode='Standalone')
     
