@@ -40,7 +40,7 @@ class FID(blankSeq.MRIBLANKSEQ):
         self.addParameter(key='repetitionTime', string='Repetition time (ms)', val=1000., field='SEQ')
         self.addParameter(key='acqTime', string='Acquisition time (ms)', val=4.0, field='SEQ')
         self.addParameter(key='nPoints', string='Number of points', val=100, field='IM')
-        self.addParameter(key='shimming', string='Shimming (*1e4)', val=[-70, -90, 10], field='OTH')
+        self.addParameter(key='shimming', string='Shimming (*1e4)', val=[-70.0, -90.0, 10.0], field='OTH')
         self.addParameter(key='txChannel', string='Tx channel', val=0, field='RF')
         self.addParameter(key='rxChannel', string='Rx channel', val=0, field='RF')
         self.addParameter(key='shimmingTime', string='Shimming time (ms)', val=1, field='OTH')
@@ -159,11 +159,15 @@ class FID(blankSeq.MRIBLANKSEQ):
         fitedLarmor=self.mapVals['larmorFreq'] + fVector[np.argmax(np.abs(spectrum))] * 1e-3  #MHz
         hw.larmorFreq=fitedLarmor
         fwhm=getFHWM(spectrum, fVector, bw)
-        dB0=fwhm*1e6/hw.larmorFreq
+        dB0 = fwhm * 1e3 / hw.larmorFreq
 
         for sequence in self.sequence_list.values():
             if 'larmorFreq' in sequence.mapVals:
                 sequence.mapVals['larmorFreq'] = hw.larmorFreq
+
+        for sequence in self.sequence_list.values():
+            if 'shimming' in sequence.mapVals:
+                sequence.mapVals['shimming'] = self.mapVals['shimming']
 
         # Get the central frequency
         print('Larmor frequency: %1.5f MHz' % fitedLarmor)

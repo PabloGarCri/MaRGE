@@ -561,11 +561,11 @@ class IMRD(blankSeq.MRIBLANKSEQ):
 
         result1 = {'widget': 'curve',
                    'xData': np.linspace(0,len(points_ratio),(len(points_ratio))*nPoints),
-                   'yData': [np.real(data_concatenated), np.imag(data_concatenated)],
+                   'yData': [np.abs(data_concatenated),np.real(data_concatenated), np.imag(data_concatenated)],
                    'xLabel': 'Time points (1/TR)',
                    'yLabel': 'Signal amplitude (mV)',
                    'title': 'Evolution during signal',
-                   'legend': ['real', 'imag'],
+                   'legend': ['abs','real', 'imag'],
                    'row': 0,
                    'col': 0}
 
