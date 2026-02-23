@@ -90,10 +90,10 @@ class RarePyPulseq(blankSeq.MRIBLANKSEQ):
         self.addParameter(key='repetitionTime', string='Repetition time (ms)', val=300., units=units.ms, field='SEQ', tip="0 to ommit this pulse")
         self.addParameter(key='fov', string='FOV[x,y,z] (cm)', val=[12.0, 12.0, 12.0], units=units.cm, field='IM')
         self.addParameter(key='dfov', string='dFOV[x,y,z] (mm)', val=[0.0, 0.0, 0.0], units=units.mm, field='IM', tip="Position of the gradient isocenter")
-        self.addParameter(key='nPoints', string='nPoints[rd, ph, sl]', val=[40, 40, 1], field='IM')
+        self.addParameter(key='nPoints', string='nPoints[rd, ph, sl]', val=[40, 120, 20], field='IM')
         self.addParameter(key='angle', string='Angle (º)', val=0.0, field='IM')
         self.addParameter(key='rotationAxis', string='Rotation axis', val=[0, 0, 1], field='IM')
-        self.addParameter(key='etl', string='Echo train length', val=4, field='SEQ') ## nm of peaks in 1 repetition
+        self.addParameter(key='etl', string='Echo train length', val=5, field='SEQ') ## nm of peaks in 1 repetition
         self.addParameter(key='acqTime', string='Acquisition time (ms)', val=4.0, units=units.ms, field='SEQ')
         self.addParameter(key='axesOrientation', string='Axes[rd,ph,sl]', val=[2, 1, 0], field='IM', tip="0=x, 1=y, 2=z")
         self.addParameter(key='axesEnable', string='Axes enable', val=[1, 1, 1], tip="Use 0 for directions with matrix size 1, use 1 otherwise.")
@@ -105,9 +105,10 @@ class RarePyPulseq(blankSeq.MRIBLANKSEQ):
         self.addParameter(key='rfPhase', string='RF phase (º)', val=0.0, field='OTH')
         self.addParameter(key='dummyPulses', string='Dummy pulses', val=1, field='SEQ', tip="Use last dummy pulse to calibrate k = 0")
         self.addParameter(key='shimming', string='Shimming (*1e4)', val=[0.0, 0.0, 0.0], units=units.sh, field='OTH')
-        self.addParameter(key='parFourierFraction', string='Partial fourier fraction', val=0.7, field='OTH', tip="Fraction of k planes aquired in slice direction")
+        self.addParameter(key='parFourierFraction', string='Partial fourier fraction', val=1.0, field='OTH', tip="Fraction of k planes aquired in slice direction")
         self.addParameter(key='echo_shift', string='Echo time shift', val=0.0, units=units.us, field='OTH', tip='Shift the gradient echo time respect to the spin echo time.')
-        self.addParameter(key='unlock_orientation', string='Unlock image orientation', val=0, field='OTH', tip='0: Images oriented according to standard. 1: Image raw orientation')
+        self.addParameter(key='unlock_orientation', string='Unlock image orientation', val= 0, field='OTH', tip='0: Images oriented according to standard. 1: Image raw orientation')
+        self.addParameter(key='ellipse_acq', string='Ellipse acquisition mask factor', val= 2, field='OTH', tip='0: No Ellipse acquisition mask. It has to be less than (1+nSlices)/2')
         self.acq = ismrmrd.Acquisition()
         self.img = ismrmrd.Image()
         self.header = ismrmrd.xsd.ismrmrdHeader()
@@ -265,6 +266,68 @@ class RarePyPulseq(blankSeq.MRIBLANKSEQ):
         # par_acq_lines in case par_acq_lines = 0
         par_acq_lines = int(int(self.nPoints[2]*self.parFourierFraction)-self.nPoints[2]/2)
         self.mapVals['partialAcquisition'] = par_acq_lines
+
+
+        #Ellispe mask
+        etl_check0= self.nPoints[1] % self.etl
+        if etl_check0 != 0:
+            print("ERROR: ETL not a multiple of nPhases")
+            return 0
+        etl_check = etl_check0 % 2
+
+        if etl_check == 0:
+            mask_type= 0
+        else:
+            mask_type = 1
+
+            return 0
+        if self.mapVals['ellipse_acq'] == 0:
+            acq_mask = np.ones((self.nPoints[1],self.nPoints[2]))
+        else:
+            if self.mapVals['ellipse_acq'] % 1 !=0:
+                print("ERROR: Ellipse factor not valid, it should be a whole number")
+                return 0
+
+            if ((1+self.nPoints[2])/2) < self.mapVals['ellipse_acq']:
+                print("ERROR: Ellipse factor not valid, it should be a whole number, smaller than (nSlices+1)/2")
+                return 0
+
+            def stepped_ellipsoidal_mask(shape, etl, h):
+
+                Nph, Nsl = shape
+
+                centerph = Nph / 2
+                nhslabs = int(centerph / etl)
+
+                if etl % 2 !=0:
+                    mask=np.ones((2*etl,Nsl))
+                else:
+                    mask=np.ones((etl,Nsl))
+
+
+                for kk in range (1,nhslabs):
+                    if Nsl - 2*kk*h <=0:
+                        break
+                    block= np.ones((etl,(Nsl-2*kk*h)))
+                    pad=np.zeros((etl,kk*h))
+
+                    slab=np.concatenate((pad,block,pad),axis=1)
+                    mask=np.concatenate((slab,mask,slab),axis=0)
+
+
+                [size_mask_ph,size_mask_sl]= np.shape(mask)
+                ph_diff= abs(int((int(size_mask_ph/2) - int(Nph/2)) / slab.shape[0]))
+                for kk in range(0,ph_diff):
+                    mask = np.concatenate((slab, mask, slab), axis=0)
+
+                return mask
+
+            acq_mask = stepped_ellipsoidal_mask(
+                shape=(self.nPoints[1], self.nPoints[2]),
+                etl=self.etl,  # ancho del escalón
+                h=self.mapVals['ellipse_acq']  # alto del escalón
+            )
+
 
         # BW
         bw = self.nPoints[0] / self.acqTime * 1e-6  # MHz
@@ -698,6 +761,7 @@ class RarePyPulseq(blankSeq.MRIBLANKSEQ):
                 ph_idx = 0
                 # Phase sweep
                 while ph_idx < n_ph:
+
                     # Check if a new batch is needed (either first batch or exceeding readout points limit)
                     if seq_idx == 0 or n_rd_points + n_rd_points_per_train > hw.maxRdPoints:
                         # If a previous batch exists, write and interpret it
@@ -736,23 +800,24 @@ class RarePyPulseq(blankSeq.MRIBLANKSEQ):
 
                     # Add echo train
                     for echo in range(self.etl):
+                        if acq_mask[ph_idx,sl_idx] == 1:
                         # Fix the phase and slice amplitude
-                        gr_ph_deph = pp.scale_grad(block_gr_ph_deph, ph_gradients[ph_idx])
-                        gr_sl_deph = pp.scale_grad(block_gr_sl_deph, sl_gradients[sl_idx])
-                        gr_ph_reph = pp.scale_grad(block_gr_ph_reph, - ph_gradients[ph_idx])
-                        gr_sl_reph = pp.scale_grad(block_gr_sl_reph, - sl_gradients[sl_idx])
+                            gr_ph_deph = pp.scale_grad(block_gr_ph_deph, ph_gradients[ph_idx])
+                            gr_sl_deph = pp.scale_grad(block_gr_sl_deph, sl_gradients[sl_idx])
+                            gr_ph_reph = pp.scale_grad(block_gr_ph_reph, - ph_gradients[ph_idx])
+                            gr_sl_reph = pp.scale_grad(block_gr_sl_reph, - sl_gradients[sl_idx])
 
                         # Add blocks
-                        batches[batch_num].add_block(block_rf_refocusing,
+                            batches[batch_num].add_block(block_rf_refocusing,
                                                 block_gr_rd_reph,
                                                 gr_ph_deph,
                                                 gr_sl_deph,
                                                 block_adc_signal,
                                                 delay_reph)
-                        batches[batch_num].add_block(gr_ph_reph,
+                            batches[batch_num].add_block(gr_ph_reph,
                                                 gr_sl_reph)
-                        n_rd_points += n_rd
-                        n_adc += 1
+                            n_rd_points += n_rd
+                            n_adc += 1
                         ph_idx += 1
 
                     # Add time delay to next repetition
@@ -1261,5 +1326,5 @@ class RarePyPulseq(blankSeq.MRIBLANKSEQ):
 if __name__ == '__main__':
     seq = RarePyPulseq()
     seq.sequenceAtributes()
-    seq.sequenceRun(plot_seq=True, demo=False, standalone=True)
+    seq.sequenceRun(plot_seq=True, demo=True, standalone=True)
     # seq.sequenceAnalysis(mode='Standalone')
